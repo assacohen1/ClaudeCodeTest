@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sheep Jump Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .game-container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 0 20px;
+        }
+
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status {
+            font-size: 18px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .game-canvas {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
+            border: 3px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 auto;
+        }
+
+        .ground {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            background: #8B4513;
+            border-top: 3px solid #654321;
+        }
+
+        .sheep {
+            position: absolute;
+            left: 100px;
+            font-size: 50px;
+            transition: none;
+            z-index: 10;
+        }
+
+        .obstacle {
+            position: absolute;
+            font-size: 40px;
+            z-index: 5;
+        }
+
+        .game-over-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        .game-over-overlay.show {
+            display: flex;
+        }
+
+        .game-over-content {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .game-over-content h2 {
+            color: #333;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .final-score {
+            font-size: 28px;
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .restart-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .restart-button:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🐑 Sheep Jump Game 🐑</h1>
+
+        <div class="game-info">
+            <div class="score">Score: <span id="scoreDisplay">0</span></div>
+            <div class="status" id="statusMessage">Press SPACE to jump!</div>
+        </div>
+
+        <div class="game-canvas" id="gameCanvas">
+            <div class="sheep" id="sheep">🐑</div>
+            <div class="ground"></div>
+
+            <div class="game-over-overlay" id="gameOverOverlay">
+                <div class="game-over-content">
+                    <h2>Game Over!</h2>
+                    <div class="final-score">Final Score: <span id="finalScore">0</span></div>
+                    <button class="restart-button" id="restartButton">Play Again</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Constants
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 400;
+        const GROUND_HEIGHT = 80;
+        const GROUND_Y = CANVAS_HEIGHT - GROUND_HEIGHT;
+
+        const SHEEP_X = 100;
+        const SHEEP_SIZE = 50;
+        const SHEEP_GROUND_Y = GROUND_Y - SHEEP_SIZE;
+
+        const OBSTACLE_SIZE = 40;
+        const OBSTACLE_GROUND_Y = GROUND_Y - OBSTACLE_SIZE;
+
+        const GRAVITY = 0.0008;
+        const JUMP_VELOCITY = -0.6;
+
+        const BASE_OBSTACLE_SPEED = 0.15;
+        const SPEED_INCREMENT = 0.02;
+        const MAX_SPEED = 0.35;
+        const SPEED_INCREASE_INTERVAL = 5;
+
+        const BASE_SPAWN_INTERVAL = 2000;
+        const SPAWN_DECREASE = 200;
+        const MIN_SPAWN_INTERVAL = 1000;
+        const SPAWN_DECREASE_INTERVAL = 10;
+
+        const COLLISION_PADDING = 8;
+        const MAX_OBSTACLES = 10;
+
+        // Game state
+        let gameActive = false;
+        let score = 0;
+        let sheepY = SHEEP_GROUND_Y;
+        let sheepVelocity = 0;
+        let isJumping = false;
+        let obstacles = [];
+        let lastTime = 0;
+        let lastSpawnTime = 0;
+        let currentSpeed = BASE_OBSTACLE_SPEED;
+        let currentSpawnInterval = BASE_SPAWN_INTERVAL;
+
+        // DOM references
+        const sheep = document.getElementById('sheep');
+        const gameCanvas = document.getElementById('gameCanvas');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const statusMessage = document.getElementById('statusMessage');
+        const gameOverOverlay = document.getElementById('gameOverOverlay');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+
+        // Initialize sheep position
+        sheep.style.bottom = SHEEP_GROUND_Y + 'px';
+
+        // Physics functions
+        function updateSheep(deltaTime) {
+            if (!gameActive) return;
+
+            // Apply gravity
+            sheepVelocity += GRAVITY * deltaTime;
+            sheepY += sheepVelocity * deltaTime;
+
+            // Ground collision
+            if (sheepY >= SHEEP_GROUND_Y) {
+                sheepY = SHEEP_GROUND_Y;
+                sheepVelocity = 0;
+                isJumping = false;
+            }
+
+            // Update sheep DOM position
+            sheep.style.bottom = sheepY + 'px';
+        }
+
+        function jump() {
+            if (!gameActive || isJumping) return;
+
+            sheepVelocity = JUMP_VELOCITY;
+            isJumping = true;
+
+            if (statusMessage.textContent === 'Press SPACE to jump!') {
+                statusMessage.textContent = 'Keep jumping!';
+            }
+        }
+
+        // Obstacle functions
+        function spawnObstacle() {
+            if (obstacles.length >= MAX_OBSTACLES) return;
+
+            const obstacle = document.createElement('div');
+            obstacle.className = 'obstacle';
+            obstacle.textContent = '🪨';
+            obstacle.style.right = '-50px';
+            obstacle.style.bottom = OBSTACLE_GROUND_Y + 'px';
+
+            gameCanvas.appendChild(obstacle);
+
+            obstacles.push({
+                element: obstacle,
+                x: CANVAS_WIDTH + 50,
+                scored: false
+            });
+        }
+
+        function updateObstacles(deltaTime) {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obstacle = obstacles[i];
+
+                // Move obstacle left
+                obstacle.x -= currentSpeed * deltaTime;
+                obstacle.element.style.right = (CANVAS_WIDTH - obstacle.x) + 'px';
+
+                // Check if obstacle cleared (for scoring)
+                if (!obstacle.scored && obstacle.x < SHEEP_X - SHEEP_SIZE) {
+                    obstacle.scored = true;
+                    score++;
+                    scoreDisplay.textContent = score;
+                    updateDifficulty();
+                }
+
+                // Remove if off-screen
+                if (obstacle.x < -50) {
+                    obstacle.element.remove();
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        function updateDifficulty() {
+            // Increase speed every 5 points
+            if (score % SPEED_INCREASE_INTERVAL === 0 && score > 0) {
+                currentSpeed = Math.min(
+                    BASE_OBSTACLE_SPEED + (Math.floor(score / SPEED_INCREASE_INTERVAL) * SPEED_INCREMENT),
+                    MAX_SPEED
+                );
+            }
+
+            // Decrease spawn interval every 10 points
+            if (score % SPAWN_DECREASE_INTERVAL === 0 && score > 0) {
+                currentSpawnInterval = Math.max(
+                    BASE_SPAWN_INTERVAL - (Math.floor(score / SPAWN_DECREASE_INTERVAL) * SPAWN_DECREASE),
+                    MIN_SPAWN_INTERVAL
+                );
+            }
+        }
+
+        // Collision detection
+        function checkCollisions() {
+            const sheepLeft = SHEEP_X + COLLISION_PADDING;
+            const sheepRight = SHEEP_X + SHEEP_SIZE - COLLISION_PADDING;
+            const sheepTop = sheepY + COLLISION_PADDING;
+            const sheepBottom = sheepY + SHEEP_SIZE - COLLISION_PADDING;
+
+            for (const obstacle of obstacles) {
+                const obsLeft = obstacle.x + COLLISION_PADDING;
+                const obsRight = obstacle.x + OBSTACLE_SIZE - COLLISION_PADDING;
+                const obsTop = OBSTACLE_GROUND_Y + COLLISION_PADDING;
+                const obsBottom = OBSTACLE_GROUND_Y + OBSTACLE_SIZE - COLLISION_PADDING;
+
+                // AABB collision
+                if (sheepRight > obsLeft &&
+                    sheepLeft < obsRight &&
+                    sheepBottom > obsTop &&
+                    sheepTop < obsBottom) {
+                    gameOver();
+                    return;
+                }
+            }
+        }
+
+        // Game loop
+        function gameLoop(timestamp) {
+            if (!gameActive) return;
+
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Update game state
+            updateSheep(deltaTime);
+            updateObstacles(deltaTime);
+            checkCollisions();
+
+            // Spawn obstacles
+            if (timestamp - lastSpawnTime > currentSpawnInterval) {
+                spawnObstacle();
+                lastSpawnTime = timestamp;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Game control
+        function startGame() {
+            if (gameActive) return;
+
+            gameActive = true;
+            lastTime = performance.now();
+            lastSpawnTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            statusMessage.textContent = 'Game Over!';
+            finalScoreDisplay.textContent = score;
+            gameOverOverlay.classList.add('show');
+        }
+
+        function restart() {
+            // Reset game state
+            gameActive = false;
+            score = 0;
+            sheepY = SHEEP_GROUND_Y;
+            sheepVelocity = 0;
+            isJumping = false;
+            currentSpeed = BASE_OBSTACLE_SPEED;
+            currentSpawnInterval = BASE_SPAWN_INTERVAL;
+
+            // Clear obstacles
+            obstacles.forEach(obstacle => obstacle.element.remove());
+            obstacles = [];
+
+            // Reset UI
+            scoreDisplay.textContent = '0';
+            statusMessage.textContent = 'Press SPACE to jump!';
+            gameOverOverlay.classList.remove('show');
+            sheep.style.bottom = SHEEP_GROUND_Y + 'px';
+
+            // Restart game
+            startGame();
+        }
+
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+
+                if (!gameActive) {
+                    startGame();
+                }
+
+                jump();
+            }
+        });
+
+        restartButton.addEventListener('click', restart);
+    </script>
+</body>
+</html>
